@@ -9,29 +9,68 @@ $(() => {
     Templates[$template.attr('id')] = Handlebars.compile($template.html());
   });
 
-  const Items = {
+
+const ProductModel = Backbone.Model.extend();
+const Products = Backbone.Collection.extend({
+  model: ProductModel,
+  lastId: 0,
+
+  render () {
+    $('tbody').html(Templates.items({
+      items: this.toJSON()
+    }));
+  },
+
+  renderPartial () {
+    $('tbody').append(Templates.item(this.last().toJSON()));
+  },
+
+  sortItems (e) {
+    const property = $(e.target).attr('data-prop');
+
+    this.comparator = property;
+    this.sort();
+  },
+
+  isEmpty () {
+    return this.length <= 0;
+  },
+
+  setLastId () {
+    if (this.isEmpty()) return;
+
+    this.lastId = this.last().get('id');
+  },
+
+  nextId () {
+    return this.lastId + 1;
+  },
+
+  initialize () {
+    this.on('update', this.setLastId);
+    this.on('remove', this.render);
+    this.on('add', this.renderPartial);
+    this.on('reset', this.render);
+    this.on('sort', this.render);
+  }
+});
+
+  const App = {
     $tbody: $('tbody'),
-    collection: [],
+    collection: new Products(),
     currentId: 1,
 
     create (itemData) {
       const item = new ProductModel(itemData);
+      item.set('id', this.collection.nextId());
 
-      item.set('id', this.currentId++);
-
-      this.collection.push(item);
+      this.collection.add(item);
 
       return item;
     },
 
-    render () {
-      this.$tbody.html(Templates.items({
-        items: this.collection
-      }));
-    },
-
     renderPartial (product) {
-      this.$tbody.append(Templates.item(product.attributes));
+      this.$tbody.append(Templates.item(product.toJSON()));
     },
 
     seedCollection () {
@@ -54,8 +93,6 @@ $(() => {
       const data = this.formatData($('form').serializeArray());
       const product = this.create(data);
 
-      this.renderPartial(product);
-
       e.currentTarget.reset();
     },
 
@@ -63,45 +100,30 @@ $(() => {
       e.preventDefault();
 
       const id = Number($(e.target).attr('data-id'));
-      let mismatches = _.groupBy(this.collection, item => item.get('id') === id).false;
+      let match = this.collection.where({ id: id });
 
-      if (mismatches === undefined) mismatches = [];
-      this.collection = mismatches;
-
-      this.render();
+      this.collection.remove(match);
     },
 
     deleteAll (e) {
       e.preventDefault();
 
-      this.collection = [];
-
-      this.render();
-    },
-
-    sortItems (e) {
-      const property = $(e.target).attr('data-prop');
-
-      this.collection = _.sortBy(this.collection, item => item.get(property));
-
-      this.render();
+      this.collection.reset();
     },
 
     bindEvents () {
       this.$tbody.on('click', 'a', this.delete.bind(this));
       $('form').on('submit', this.add.bind(this));
       $('p a').on('click', this.deleteAll.bind(this));
-      $('th').on('click', this.sortItems.bind(this));
+      $('th').on('click', this.collection.sortItems.bind(this.collection));
     },
 
     init () {
       this.seedCollection();
-      this.render();
+      this.collection.render();
       this.bindEvents();
     },
   };
 
-  const ProductModel = Backbone.Model.extend();
-
-  Items.init();
+  App.init();
 });
