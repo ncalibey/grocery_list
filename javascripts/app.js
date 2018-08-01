@@ -1,129 +1,93 @@
 $(() => {
-  const Templates = {};
+  const App = {
+    init () {
+      this.Items = new ItemsCollection(items_json);
+      this.View = new ItemsView({ collection: this.Items });
+      this.Items.sortByName();
+    }
+  };
+
+  const ItemModel = Backbone.Model.extend({
+    idAttribute: 'id',
+    initialize () {
+      this.collection.incrementID();
+      this.set('id', this.collection.lastId);
+    }
+  });
+
+  const ItemsView = Backbone.View.extend({
+    events: {
+      'click a': 'removeItem',
+    },
+    template: Handlebars.compile($('#items').html()),
+    el: 'tbody',
+
+    render () {
+      this.$el.html(this.template({
+        items: this.collection.toJSON()
+      }));
+    },
+
+    removeItem (e) {
+      e.preventDefault();
+
+      const model = this.collection.get(Number($(e.target).attr('data-id')));
+      this.collection.remove(model);
+    },
+
+    initialize () {
+      this.render();
+      this.listenTo(this.collection, 'remove reset rerender', this.render);
+    },
+  });
+
+  const ItemsCollection = Backbone.Collection.extend({
+    lastId: 0,
+    model: ItemModel,
+
+    incrementID () {
+      this.lastId++;
+    },
+
+    sortBy (prop) {
+      this.models = _(this.models).sortBy(m => m.attributes[prop]);
+      this.trigger('rerender');
+    },
+
+    sortByName () {
+      this.sortBy('name');
+    },
+
+    initialize () {
+      this.on('add', this.sortByName);
+    }
+  });
 
   Handlebars.registerPartial('item', $('#item').html());
 
-  $('[type="text/x-handlebars"]').each((i, template) => {
-    const $template = $(template).remove();
+  $('form').on('submit', (e) => {
+    e.preventDefault();
 
-    Templates[$template.attr('id')] = Handlebars.compile($template.html());
+    const $form = $(e.target);
+    const inputs = $form.serializeArray();
+    const attrs = {};
+
+    inputs.forEach(input => attrs[input.name] = input.value);
+
+    let item = App.Items.add(attrs);
+    $form.reset();
   });
 
+  $('th').on('click', (e) => {
+    const prop = $(e.currentTarget).attr('data-prop');
+    App.Items.sortBy(prop);
+  });
 
-const ProductModel = Backbone.Model.extend();
-const Products = Backbone.Collection.extend({
-  model: ProductModel,
-  lastId: 0,
+  $('p a').on('click', e => {
+    e.preventDefault();
 
-  render () {
-    $('tbody').html(Templates.items({
-      items: this.toJSON()
-    }));
-  },
-
-  renderPartial () {
-    $('tbody').append(Templates.item(this.last().toJSON()));
-  },
-
-  sortItems (e) {
-    const property = $(e.target).attr('data-prop');
-
-    this.comparator = property;
-    this.sort();
-  },
-
-  isEmpty () {
-    return this.length <= 0;
-  },
-
-  setLastId () {
-    if (this.isEmpty()) return;
-
-    this.lastId = this.last().get('id');
-  },
-
-  nextId () {
-    return this.lastId + 1;
-  },
-
-  initialize () {
-    this.on('update', this.setLastId);
-    this.on('remove', this.render);
-    this.on('add', this.renderPartial);
-    this.on('reset', this.render);
-    this.on('sort', this.render);
-  }
-});
-
-  const App = {
-    $tbody: $('tbody'),
-    collection: new Products(),
-    currentId: 1,
-
-    create (itemData) {
-      const item = new ProductModel(itemData);
-      item.set('id', this.collection.nextId());
-
-      this.collection.add(item);
-
-      return item;
-    },
-
-    renderPartial (product) {
-      this.$tbody.append(Templates.item(product.toJSON()));
-    },
-
-    seedCollection () {
-      items_json.forEach(this.create.bind(this));
-    },
-
-    formatData (data) {
-      const formatted = {};
-
-      data.forEach(obj => {
-        formatted[obj.name] = obj.value;
-      });
-
-      return formatted;
-    },
-
-    add (e) {
-      e.preventDefault();
-
-      const data = this.formatData($('form').serializeArray());
-      const product = this.create(data);
-
-      e.currentTarget.reset();
-    },
-
-    delete (e) {
-      e.preventDefault();
-
-      const id = Number($(e.target).attr('data-id'));
-      let match = this.collection.where({ id: id });
-
-      this.collection.remove(match);
-    },
-
-    deleteAll (e) {
-      e.preventDefault();
-
-      this.collection.reset();
-    },
-
-    bindEvents () {
-      this.$tbody.on('click', 'a', this.delete.bind(this));
-      $('form').on('submit', this.add.bind(this));
-      $('p a').on('click', this.deleteAll.bind(this));
-      $('th').on('click', this.collection.sortItems.bind(this.collection));
-    },
-
-    init () {
-      this.seedCollection();
-      this.collection.render();
-      this.bindEvents();
-    },
-  };
+    App.Items.reset();
+  });
 
   App.init();
 });
